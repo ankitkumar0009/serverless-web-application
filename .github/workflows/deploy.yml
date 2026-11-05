@@ -1,0 +1,84 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  validate-and-test:
+    name: Code Quality & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest boto3
+
+      - name: Lint Python Code
+        run: |
+          # Stop build if there are Python syntax errors or undefined names
+          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings
+          flake8 backend/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Run Unit Tests
+        run: |
+          python -m unittest discover -s backend -p "test_*.py"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+
+      - name: Validate Terraform Syntax
+        run: |
+          cd terraform
+          terraform fmt -check
+          terraform init -backend=false
+          terraform validate
+
+  deploy:
+    name: Deploy to AWS
+    needs: validate-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        if: env.AWS_ACCESS_KEY_ID != ''
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+
+      - name: Deploy Frontend to S3 & Invalidate CloudFront
+        if: env.AWS_ACCESS_KEY_ID != '' && env.S3_BUCKET_NAME != ''
+        run: |
+          echo "Syncing frontend files to S3 bucket ${{ secrets.S3_BUCKET_NAME }}..."
+          aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }}/ --exclude "*" --include "*.html" --include "*.css" --include "*.js" --delete
+
+          if [ -n "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
+            echo "Invalidating CloudFront cache..."
+            aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
+          fi
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}

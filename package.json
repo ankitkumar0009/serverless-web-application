@@ -1,0 +1,25 @@
+{
+  "name": "serverless-web-application",
+  "version": "2.0.0",
+  "description": "Full-featured production-ready serverless web application on AWS with Lambda, DynamoDB, API Gateway, S3, CloudFront, and Terraform.",
+  "main": "local-server.js",
+  "scripts": {
+    "start": "node local-server.js",
+    "dev": "node local-server.js",
+    "test": "node -e \"console.log('Validating local mock server syntax...'); require('./local-server.js'); process.exit(0);\""
+  },
+  "keywords": [
+    "aws",
+    "serverless",
+    "lambda",
+    "dynamodb",
+    "api-gateway",
+    "s3",
+    "cloudfront",
+    "terraform",
+    "sam",
+    "cloud-resume"
+  ],
+  "author": "Ankit Chaudhary",
+  "license": "MIT"
+}

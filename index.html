@@ -1,23 +1,267 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-	<title>A Monk in Cloud</title>
-	<link rel="stylesheet" type="text/css" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serverless Web Application on AWS</title>
+    <meta name="description" content="Production-ready serverless CRUD web application with AWS Lambda, DynamoDB, API Gateway, S3, CloudFront, and Terraform.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-	<header>
-		<h1>Greeting App</h1>
-        <div class="counter-number">Views</div>
-	</header>
-	<main>
-		<form>
-			<label for="name">Name:</label>
-			<input type="text" id="name" name="name">
-			<button id="submit-btn">Submit</button>
-		</form>
-		<p id="greeting"></p>
-	</main>
-	<script src="script.js"></script>
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+        <div class="nav-container">
+            <div class="brand">
+                <div class="brand-logo">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>Serverless Cloud App</h1>
+                    <span class="brand-subtitle">AWS Lambda &bull; DynamoDB &bull; S3 &bull; CloudFront</span>
+                </div>
+            </div>
+
+            <div class="nav-actions">
+                <!-- Live Views Badge -->
+                <div class="views-badge" title="Live Visitor Counter from DynamoDB">
+                    <span class="status-dot"></span>
+                    <span class="views-label">Views:</span>
+                    <span id="counterNumber" class="counter-number">...</span>
+                    <button id="refreshCounterBtn" class="icon-btn" title="Refresh Counter">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- API Connection Settings -->
+                <button id="openSettingsBtn" class="btn btn-secondary btn-sm" title="Configure Backend API Endpoint">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    <span>API Settings</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <!-- Architecture Pill / Notification Banner -->
+        <div class="architecture-banner">
+            <div class="arch-flow">
+                <span class="arch-step">CloudFront CDN</span>
+                <span class="arch-arrow">&rarr;</span>
+                <span class="arch-step">S3 Static Host</span>
+                <span class="arch-arrow">&rarr;</span>
+                <span class="arch-step">API Gateway HTTP API</span>
+                <span class="arch-arrow">&rarr;</span>
+                <span class="arch-step">AWS Lambda (Python)</span>
+                <span class="arch-arrow">&rarr;</span>
+                <span class="arch-step">Amazon DynamoDB</span>
+            </div>
+            <div id="endpointBadge" class="endpoint-badge" title="Active API connection target">
+                Mode: <strong id="currentModeLabel">Detecting...</strong>
+            </div>
+        </div>
+
+        <!-- Two Column Layout: Greeting Form & DynamoDB Item Management -->
+        <div class="dashboard-grid">
+            
+            <!-- Left Column: Quick Greeting & System Status -->
+            <section class="card greeting-card">
+                <div class="card-header">
+                    <h2>Greeting & Visitor Check</h2>
+                    <span class="badge">Interactive</span>
+                </div>
+                <p class="card-description">
+                    Test client-server responsiveness and generate personalized greetings.
+                </p>
+
+                <form id="greetingForm" class="form">
+                    <div class="form-group">
+                        <label for="nameInput">Your Name</label>
+                        <input type="text" id="nameInput" name="name" placeholder="e.g. Cloud Engineer" required autocomplete="off">
+                    </div>
+                    <button type="submit" id="submitBtn" class="btn btn-primary">
+                        <span>Send Greeting</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"/>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                        </svg>
+                    </button>
+                </form>
+
+                <div id="greetingOutput" class="greeting-output hidden">
+                    <div class="greeting-avatar">&#128075;</div>
+                    <div class="greeting-text">
+                        <h3 id="greeting"></h3>
+                        <p class="greeting-meta" id="greetingTimestamp"></p>
+                    </div>
+                </div>
+
+                <!-- Cloud Stats Info -->
+                <div class="cloud-info-box">
+                    <h3>Serverless Architecture Highlights</h3>
+                    <ul class="features-list">
+                        <li><strong>Zero Servers:</strong> Fully managed pay-per-request infrastructure</li>
+                        <li><strong>Atomic DynamoDB Counter:</strong> Race-condition free view tracking</li>
+                        <li><strong>REST API:</strong> Full CRUD operations powered by AWS Lambda</li>
+                        <li><strong>Low Latency:</strong> Global caching via Amazon CloudFront edge nodes</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Right Column: Full DynamoDB CRUD Manager -->
+            <section class="card items-card">
+                <div class="card-header flex-between">
+                    <div>
+                        <h2>DynamoDB Items Manager</h2>
+                        <span class="card-subtitle">Perform full CRUD (Create, Read, Update, Delete) against DynamoDB</span>
+                    </div>
+                    <button id="newItemBtn" class="btn btn-accent btn-sm">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        <span>Add Item</span>
+                    </button>
+                </div>
+
+                <!-- Search and Filter Bar -->
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" id="searchInput" placeholder="Search items by title or description...">
+                    </div>
+                    <select id="categoryFilter" class="select-dropdown">
+                        <option value="all">All Categories</option>
+                        <option value="Architecture">Architecture</option>
+                        <option value="DevOps">DevOps</option>
+                        <option value="Database">Database</option>
+                        <option value="Security">Security</option>
+                        <option value="general">General</option>
+                    </select>
+                </div>
+
+                <!-- Items Container / List -->
+                <div id="itemsLoading" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading items from DynamoDB...</p>
+                </div>
+
+                <div id="itemsEmpty" class="empty-state hidden">
+                    <div class="empty-icon">&#128221;</div>
+                    <h3>No items found</h3>
+                    <p>Get started by adding your first serverless data record.</p>
+                    <button id="emptyAddBtn" class="btn btn-primary btn-sm">Create Item</button>
+                </div>
+
+                <div id="itemsContainer" class="items-grid"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Create / Edit Item Modal -->
+    <div id="itemModal" class="modal hidden">
+        <div class="modal-backdrop" id="modalBackdrop"></div>
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="modalTitle">Create New Item</h3>
+                <button class="modal-close" id="modalCloseBtn">&times;</button>
+            </div>
+            <form id="itemForm">
+                <input type="hidden" id="itemId">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="itemTitle">Item Title <span class="required">*</span></label>
+                        <input type="text" id="itemTitle" placeholder="e.g. Set up DynamoDB Point-in-Time Recovery" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col">
+                            <label for="itemCategory">Category</label>
+                            <select id="itemCategory" class="select-dropdown">
+                                <option value="Architecture">Architecture</option>
+                                <option value="DevOps">DevOps</option>
+                                <option value="Database">Database</option>
+                                <option value="Security">Security</option>
+                                <option value="general">General</option>
+                            </select>
+                        </div>
+                        <div class="form-group col">
+                            <label for="itemStatus">Status</label>
+                            <select id="itemStatus" class="select-dropdown">
+                                <option value="active">Active</option>
+                                <option value="in-progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="itemDescription">Description</label>
+                        <textarea id="itemDescription" rows="3" placeholder="Provide technical details, requirements, or notes..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveItemBtn">Save to DynamoDB</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- API Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-backdrop" id="settingsBackdrop"></div>
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3>Backend API Configuration</h3>
+                <button class="modal-close" id="settingsCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-hint">
+                    Choose an API endpoint mode or connect your live AWS API Gateway / Lambda Function URL.
+                </p>
+                
+                <div class="settings-presets">
+                    <button type="button" class="preset-btn" id="presetLocalBtn">
+                        <strong>Local Dev Server</strong>
+                        <span>http://localhost:3000</span>
+                    </button>
+                    <button type="button" class="preset-btn" id="presetMockBtn">
+                        <strong>Browser Demo Mode</strong>
+                        <span>Simulated in-memory storage</span>
+                    </button>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="apiUrlInput">Custom AWS API Endpoint URL:</label>
+                    <input type="url" id="apiUrlInput" placeholder="https://xxxx.execute-api.us-east-1.amazonaws.com or Lambda URL">
+                    <span class="field-hint">Paste your Terraform / SAM output endpoint here. Leave blank to use relative path.</span>
+                </div>
+
+                <div id="apiTestStatus" class="api-test-status hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="testApiBtn">Test Connection</button>
+                <button type="button" class="btn btn-primary" id="saveApiBtn">Apply Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="script.js"></script>
 </body>
 </html>
- 
