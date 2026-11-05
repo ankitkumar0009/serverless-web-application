@@ -3,13 +3,25 @@ Unit Tests for Serverless Web Application Lambda Handler
 Tests CRUD operations, counter increment, and CORS headers using unittest.mock.
 """
 
+import os
+import sys
 import json
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-# Ensure environment variable is set prior to importing handler
-import os
+# Configure dummy AWS environment variables BEFORE importing boto3 or handler
+os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+os.environ['AWS_REGION'] = 'us-east-1'
+os.environ['AWS_ACCESS_KEY_ID'] = 'testing-key-id'
+os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing-secret-key'
+os.environ['AWS_SECURITY_TOKEN'] = 'testing-token'
+os.environ['AWS_SESSION_TOKEN'] = 'testing-session'
 os.environ['TABLE_NAME'] = 'test-table'
+
+# Ensure the backend directory is in sys.path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
 
 import lambda_function
 
@@ -54,7 +66,7 @@ class TestLambdaHandler(unittest.TestCase):
         self.assertEqual(response['statusCode'], 200)
         body = json.loads(response['body'])
         self.assertEqual(body['count'], 2)
-        self.assertEqual(body['items'][0]['id'], 'item-2')  # Descending order
+        self.assertEqual(body['items'][0]['id'], 'item-2')
 
     def test_create_item_valid(self):
         """Test creating an item with a valid title."""
@@ -93,4 +105,3 @@ class TestLambdaHandler(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

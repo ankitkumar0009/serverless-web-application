@@ -19,10 +19,25 @@ from botocore.exceptions import ClientError
 # Configuration
 TABLE_NAME = os.environ.get('TABLE_NAME', 'serverless-web-application-on-aws')
 COUNTER_ID = '0'  # Retained for backward-compatibility with original schema
+AWS_REGION = os.environ.get('AWS_REGION') or os.environ.get('AWS_DEFAULT_REGION') or 'us-east-1'
 
-# DynamoDB client initialization
-dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table(TABLE_NAME)
+# Safe DynamoDB client initialization
+try:
+    dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+    table = dynamodb.Table(TABLE_NAME)
+except Exception as init_error:
+    print(f"Warning: Could not initialize DynamoDB resource directly: {init_error}")
+    dynamodb = None
+    table = None
+
+
+def get_table():
+    """Lazy-load or retrieve DynamoDB table instance."""
+    global table
+    if table is None:
+        client = boto3.resource('dynamodb', region_name=AWS_REGION)
+        table = client.Table(TABLE_NAME)
+    return table
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -50,22 +65,18 @@ def build_response(status_code, body=None):
 
 def parse_event(event):
     """Normalize method and path across REST API (v1), HTTP API (v2), and Function URLs."""
-    # Method extraction
     http_method = event.get('httpMethod')
     if not http_method and 'requestContext' in event:
         http_method = event['requestContext'].get('http', {}).get('method')
     http_method = (http_method or 'GET').upper()
 
-    # Path extraction
     path = event.get('path') or event.get('rawPath') or '/'
 
-    # Path parameters extraction
     path_parameters = event.get('pathParameters') or {}
     item_id = path_parameters.get('id')
     if not item_id and '/items/' in path:
         item_id = path.rstrip('/').split('/')[-1]
 
-    # Body parsing
     raw_body = event.get('body')
     body = {}
     if raw_body:
@@ -82,7 +93,8 @@ def parse_event(event):
 def handle_counter():
     """Atomically increment and return the visitor view counter."""
     try:
-        response = table.update_item(
+        tbl = get_table()
+        response = tbl.update_item(
             Key={'id': COUNTER_ID},
             UpdateExpression='ADD #v :inc',
             ExpressionAttributeNames={'#v': 'views'},
@@ -99,11 +111,10 @@ def handle_counter():
 def list_items():
     """List all items, excluding system metadata/counter keys."""
     try:
-        response = table.scan()
+        tbl = get_table()
+        response = tbl.scan()
         all_records = response.get('Items', [])
-        # Filter out counter records
         items = [item for item in all_records if item.get('id') != COUNTER_ID and not item.get('id', '').startswith('counter_')]
-        # Sort by createdAt descending if present
         items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
         return build_response(200, {'items': items, 'count': len(items)})
     except ClientError as e:
@@ -114,7 +125,8 @@ def list_items():
 def get_item(item_id):
     """Retrieve a single item by id."""
     try:
-        response = table.get_item(Key={'id': item_id})
+        tbl = get_table()
+        response = tbl.get_item(Key={'id': item_id})
         item = response.get('Item')
         if not item or item.get('id') == COUNTER_ID:
             return build_response(404, {'error': f"Item with id '{item_id}' not found"})
@@ -143,7 +155,8 @@ def create_item(data):
     }
 
     try:
-        table.put_item(Item=new_item)
+        tbl = get_table()
+        tbl.put_item(Item=new_item)
         return build_response(201, {'message': 'Item created successfully', 'item': new_item})
     except ClientError as e:
         print(f"DynamoDB Error creating item: {e.response['Error']['Message']}")
@@ -155,15 +168,14 @@ def update_item(item_id, data):
     if not item_id:
         return build_response(400, {'error': 'Item ID is required'})
 
-    # Verify existence first
+    tbl = get_table()
     try:
-        existing = table.get_item(Key={'id': item_id}).get('Item')
+        existing = tbl.get_item(Key={'id': item_id}).get('Item')
         if not existing or existing.get('id') == COUNTER_ID:
             return build_response(404, {'error': f"Item with id '{item_id}' not found"})
     except ClientError as e:
         return build_response(500, {'error': 'Failed to check item existence', 'details': str(e)})
 
-    # Build dynamic update expression
     update_fields = {}
     if 'title' in data and data['title'].strip():
         update_fields['title'] = data['title'].strip()
@@ -180,7 +192,7 @@ def update_item(item_id, data):
     expr_values = {f":{k}": v for k, v in update_fields.items()}
 
     try:
-        response = table.update_item(
+        response = tbl.update_item(
             Key={'id': item_id},
             UpdateExpression=update_expr,
             ExpressionAttributeNames=expr_names,
@@ -199,7 +211,8 @@ def delete_item(item_id):
         return build_response(400, {'error': 'Item ID is required'})
 
     try:
-        table.delete_item(Key={'id': item_id})
+        tbl = get_table()
+        tbl.delete_item(Key={'id': item_id})
         return build_response(200, {'message': f"Item '{item_id}' deleted successfully", 'id': item_id})
     except ClientError as e:
         print(f"DynamoDB Error deleting item: {e.response['Error']['Message']}")
@@ -210,17 +223,14 @@ def lambda_handler(event, context):
     """Main AWS Lambda Handler routing requests."""
     print(f"Received event: {json.dumps(event) if isinstance(event, dict) else event}")
 
-    # Guard for empty or direct invocation test
     if not event:
         return handle_counter()
 
     method, path, item_id, body = parse_event(event)
 
-    # Handle CORS Preflight OPTIONS
     if method == 'OPTIONS':
         return build_response(200, {'status': 'ok'})
 
-    # Router logic
     if path == '/views' or path == '/counter' or (path == '/' and method == 'GET' and not item_id):
         return handle_counter()
 
@@ -238,9 +248,7 @@ def lambda_handler(event, context):
         else:
             return build_response(405, {'error': f"Method '{method}' not allowed on items"})
 
-    # Fallback default: if legacy client calls root or unspecified endpoint, return counter
     if method == 'GET':
         return handle_counter()
 
     return build_response(404, {'error': f"Route '{method} {path}' not found"})
-

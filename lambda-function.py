@@ -19,10 +19,25 @@ from botocore.exceptions import ClientError
 # Configuration
 TABLE_NAME = os.environ.get('TABLE_NAME', 'serverless-web-application-on-aws')
 COUNTER_ID = '0'  # Retained for backward-compatibility with original schema
+AWS_REGION = os.environ.get('AWS_REGION') or os.environ.get('AWS_DEFAULT_REGION') or 'us-east-1'
 
-# DynamoDB client initialization
-dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table(TABLE_NAME)
+# Safe DynamoDB client initialization
+try:
+    dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+    table = dynamodb.Table(TABLE_NAME)
+except Exception as init_error:
+    print(f"Warning: Could not initialize DynamoDB resource directly: {init_error}")
+    dynamodb = None
+    table = None
+
+
+def get_table():
+    """Lazy-load or retrieve DynamoDB table instance."""
+    global table
+    if table is None:
+        client = boto3.resource('dynamodb', region_name=AWS_REGION)
+        table = client.Table(TABLE_NAME)
+    return table
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -78,7 +93,8 @@ def parse_event(event):
 def handle_counter():
     """Atomically increment and return the visitor view counter."""
     try:
-        response = table.update_item(
+        tbl = get_table()
+        response = tbl.update_item(
             Key={'id': COUNTER_ID},
             UpdateExpression='ADD #v :inc',
             ExpressionAttributeNames={'#v': 'views'},
@@ -95,7 +111,8 @@ def handle_counter():
 def list_items():
     """List all items, excluding system metadata/counter keys."""
     try:
-        response = table.scan()
+        tbl = get_table()
+        response = tbl.scan()
         all_records = response.get('Items', [])
         items = [item for item in all_records if item.get('id') != COUNTER_ID and not item.get('id', '').startswith('counter_')]
         items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
@@ -108,7 +125,8 @@ def list_items():
 def get_item(item_id):
     """Retrieve a single item by id."""
     try:
-        response = table.get_item(Key={'id': item_id})
+        tbl = get_table()
+        response = tbl.get_item(Key={'id': item_id})
         item = response.get('Item')
         if not item or item.get('id') == COUNTER_ID:
             return build_response(404, {'error': f"Item with id '{item_id}' not found"})
@@ -137,7 +155,8 @@ def create_item(data):
     }
 
     try:
-        table.put_item(Item=new_item)
+        tbl = get_table()
+        tbl.put_item(Item=new_item)
         return build_response(201, {'message': 'Item created successfully', 'item': new_item})
     except ClientError as e:
         print(f"DynamoDB Error creating item: {e.response['Error']['Message']}")
@@ -149,8 +168,9 @@ def update_item(item_id, data):
     if not item_id:
         return build_response(400, {'error': 'Item ID is required'})
 
+    tbl = get_table()
     try:
-        existing = table.get_item(Key={'id': item_id}).get('Item')
+        existing = tbl.get_item(Key={'id': item_id}).get('Item')
         if not existing or existing.get('id') == COUNTER_ID:
             return build_response(404, {'error': f"Item with id '{item_id}' not found"})
     except ClientError as e:
@@ -172,7 +192,7 @@ def update_item(item_id, data):
     expr_values = {f":{k}": v for k, v in update_fields.items()}
 
     try:
-        response = table.update_item(
+        response = tbl.update_item(
             Key={'id': item_id},
             UpdateExpression=update_expr,
             ExpressionAttributeNames=expr_names,
@@ -191,7 +211,8 @@ def delete_item(item_id):
         return build_response(400, {'error': 'Item ID is required'})
 
     try:
-        table.delete_item(Key={'id': item_id})
+        tbl = get_table()
+        tbl.delete_item(Key={'id': item_id})
         return build_response(200, {'message': f"Item '{item_id}' deleted successfully", 'id': item_id})
     except ClientError as e:
         print(f"DynamoDB Error deleting item: {e.response['Error']['Message']}")

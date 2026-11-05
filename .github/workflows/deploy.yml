@@ -24,16 +24,25 @@ jobs:
       - name: Install Test Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pytest boto3
+          pip install flake8 boto3
 
       - name: Lint Python Code
         run: |
           # Stop build if there are Python syntax errors or undefined names
           flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings
+          # Warnings check
           flake8 backend/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run Unit Tests
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: mock-key-for-tests
+          AWS_SECRET_ACCESS_KEY: mock-secret-for-tests
+          AWS_SECURITY_TOKEN: mock-token-for-tests
+          AWS_SESSION_TOKEN: mock-session-for-tests
+          TABLE_NAME: test-table
+          PYTHONPATH: backend
         run: |
           python -m unittest discover -s backend -p "test_*.py"
 
@@ -59,27 +68,32 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      - name: Check AWS Secrets Availability
+        id: check_aws
+        run: |
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "AWS credentials detected."
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "No AWS credentials found in repository secrets. Skipping automated deployment."
+          fi
+
       - name: Configure AWS Credentials
-        if: env.AWS_ACCESS_KEY_ID != ''
+        if: steps.check_aws.outputs.has_credentials == 'true'
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
 
       - name: Deploy Frontend to S3 & Invalidate CloudFront
-        if: env.AWS_ACCESS_KEY_ID != '' && env.S3_BUCKET_NAME != ''
+        if: steps.check_aws.outputs.has_credentials == 'true' && secrets.S3_BUCKET_NAME != ''
         run: |
           echo "Syncing frontend files to S3 bucket ${{ secrets.S3_BUCKET_NAME }}..."
-          aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }}/ --exclude "*" --include "*.html" --include "*.css" --include "*.js" --delete
+          aws s3 sync frontend/ s3://${{ secrets.S3_BUCKET_NAME }}/ --delete
 
           if [ -n "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
             echo "Invalidating CloudFront cache..."
             aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
           fi
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-

@@ -9,6 +9,10 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 }
 
@@ -23,4 +27,3 @@ provider "aws" {
     }
   }
 }
-
