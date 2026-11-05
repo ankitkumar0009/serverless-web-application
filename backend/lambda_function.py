@@ -243,3 +243,4 @@ def lambda_handler(event, context):
         return handle_counter()
 
     return build_response(404, {'error': f"Route '{method} {path}' not found"})
+

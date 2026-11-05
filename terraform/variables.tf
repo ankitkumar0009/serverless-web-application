@@ -21,3 +21,4 @@ variable "table_name" {
   description = "DynamoDB table name"
   default     = "serverless-web-application-on-aws"
 }
+

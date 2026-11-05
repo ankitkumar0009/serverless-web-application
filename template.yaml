@@ -97,3 +97,4 @@ Outputs:
   LambdaFunctionArn:
     Description: Lambda Function ARN
     Value: !GetAtt ServerlessFunction.Arn
+
