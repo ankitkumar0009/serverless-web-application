@@ -1,5 +1,6 @@
 # ☁️ Serverless Web Application on AWS
 
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live%20Demo-brightgreen?logo=github)](https://ankitkumar0009.github.io/serverless-web-application/)
 [![AWS Lambda](https://img.shields.io/badge/AWS-Lambda-orange?logo=amazon-aws)](https://aws.amazon.com/lambda/)
 [![Amazon DynamoDB](https://img.shields.io/badge/Amazon-DynamoDB-blue?logo=amazon-dynamodb)](https://aws.amazon.com/dynamodb/)
 [![Amazon S3](https://img.shields.io/badge/Amazon-S3-red?logo=amazon-s3)](https://aws.amazon.com/s3/)
@@ -7,6 +8,8 @@
 [![Terraform](https://img.shields.io/badge/IaC-Terraform-blueviolet?logo=terraform)](https://www.terraform.io/)
 [![AWS SAM](https://img.shields.io/badge/IaC-AWS_SAM-red)](https://aws.amazon.com/serverless/sam/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> 🌐 **Live Web Demo**: [https://ankitkumar0009.github.io/serverless-web-application/](https://ankitkumar0009.github.io/serverless-web-application/)
 
 A production-ready, highly scalable serverless web application built on **Amazon Web Services (AWS)**. Features an **atomic DynamoDB visitor counter**, a **full CRUD item management REST API**, **Infrastructure-as-Code (Terraform & SAM)**, automated **CI/CD via GitHub Actions**, and a **modern, responsive web dashboard**.
 

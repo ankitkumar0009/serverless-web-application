@@ -58,7 +58,25 @@ jobs:
           terraform init -backend=false
           terraform validate
 
-  deploy:
+  deploy-github-pages:
+    name: Deploy to GitHub Pages
+    needs: validate-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Deploy Frontend to gh-pages Branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend
+
+  deploy-aws:
     name: Deploy to AWS
     needs: validate-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -80,7 +98,7 @@ jobs:
             echo "AWS credentials and S3 bucket found in secrets."
           else
             echo "can_deploy=false" >> $GITHUB_OUTPUT
-            echo "AWS secrets not configured. Skipping automated deployment."
+            echo "AWS secrets not configured. Skipping automated AWS deployment."
           fi
 
       - name: Configure AWS Credentials
